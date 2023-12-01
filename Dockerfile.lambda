@@ -1,0 +1,21 @@
+FROM golang:1.18 AS builder
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the entire source code from the current directory to the PWD(Present Working Directory) inside the container
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o lambda cmd/lambda/main.go
+
+# Final stage: Run the built binary
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
+
+# Copy the binary from the builder stage
+COPY --from=builder /app/lambda .
+
+CMD ["./lambda"]

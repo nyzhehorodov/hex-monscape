@@ -1,0 +1,11 @@
+FROM node:16-alpine as build-stage
+WORKDIR /app
+COPY cmd/client/package*.json ./
+RUN npm install
+COPY cmd/client/ .
+RUN npm run build:production
+
+FROM nginx:stable-alpine as production-stage
+COPY --from=build-stage /app/dist /usr/share/nginx/html
+EXPOSE 8080
+CMD ["nginx", "-g", "daemon off;"]
