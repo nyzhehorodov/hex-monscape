@@ -1,0 +1,151 @@
+namespace: hex-monscape
+
+client:
+  defines: runnable
+  metadata:
+    name: client
+    description: Web UI for Hex Monscape game, built with Vue 3 + Vite.
+    icon: https://emojiapi.dev/api/v1/robot.svg
+  containers:
+    client:
+      image: env-3251.registry.local/client:master-51cea85
+      build: .
+      dockerfile: Dockerfile.client
+  services:
+    http-server:
+      description: Port for serving the web UI
+      container: client
+      port: 8080
+      host-port: 8080
+      publish: true
+      protocol: tcp
+  connections:
+    api-server-connection:
+      target: hex-monscape/server
+      service: server-port
+      optional: true
+      description: >-
+        Connection to the server component of the game application for API
+        requests
+  variables:
+    vite-api-stage-path:
+      env: VITE_API_STAGE_PATH
+      type: string
+      value: <- connection-hostname("api-server-connection")
+      description: API Gateway required stage path for routing
+
+lambda:
+  defines: runnable
+  metadata:
+    name: lambda
+    description: AWS Lambda function for online game demo.
+    icon: https://emojiapi.dev/api/v1/robot.svg
+  containers:
+    lambda:
+      image: env-3251.registry.local/lambda:master-51cea85
+      build: .
+      dockerfile: Dockerfile.lambda
+  services:
+    lambda-service-port:
+      description: Port for the Lambda service when running in server mode
+      container: lambda
+      port: 9186
+      host-port: 9186
+      publish: true
+      protocol: tcp
+  connections:
+    dynamodb-connection:
+      target: hex-monscape/dynamodb
+      service: dynamodb-port
+      optional: true
+      description: Connection to AWS DynamoDB for game data storage
+  variables:
+    localstack-endpoint:
+      env: LOCALSTACK_ENDPOINT
+      type: string
+      value: http://localhost:4566
+      description: Endpoint for Localstack, used for local development
+    battle-table:
+      env: BATTLE_TABLE
+      type: string
+      value: battles
+      description: DynamoDB table name for battles
+    game-table:
+      env: GAME_TABLE
+      type: string
+      value: games
+      description: DynamoDB table name for game state
+    monster-table:
+      env: MONSTER_TABLE
+      type: string
+      value: monsters
+      description: DynamoDB table name for monsters
+
+server:
+  defines: runnable
+  metadata:
+    name: server
+    description: Server component of the game application.
+    icon: https://emojiapi.dev/api/v1/robot.svg
+  containers:
+    server:
+      image: env-3251.registry.local/server:master-51cea85
+      build: .
+      dockerfile: Dockerfile.server
+  services:
+    server-port:
+      description: Port exposed by the server service for incoming connections
+      container: server
+      port: $port
+      host-port: $port
+      publish: true
+      protocol: tcp
+  connections: {}
+  variables:
+    port:
+      env: PORT
+      type: string
+      value: 8080
+      description: Port on which the server service will run
+    storage-type:
+      env: STORAGE_TYPE
+      type: string
+      value: memory
+      description: Type of storage to use, can be memory, dynamodb, or mysql
+    monster-data-path:
+      env: MONSTER_DATA_PATH
+      type: string
+      value: /data/monsters.json
+      description: File path for monster data, used when storage type is memory
+    localstack-endpoint:
+      env: LOCALSTACK_ENDPOINT
+      type: string
+      value: null
+      description: Localstack endpoint for DynamoDB, used when storage type is dynamodb
+    battle-table-name:
+      env: BATTLE_TABLE_NAME
+      type: string
+      value: null
+      description: DynamoDB table name for battles, used when storage type is dynamodb
+    game-table-name:
+      env: GAME_TABLE_NAME
+      type: string
+      value: null
+      description: DynamoDB table name for games, used when storage type is dynamodb
+    monster-table-name:
+      env: MONSTER_TABLE_NAME
+      type: string
+      value: null
+      description: DynamoDB table name for monsters, used when storage type is dynamodb
+    sql-dsn:
+      env: SQL_DSN
+      type: string
+      value: null
+      description: Data Source Name for MySQL, used when storage type is mysql
+
+stack:
+  defines: group
+  members:
+    - hex-monscape/client
+    - hex-monscape/lambda
+    - hex-monscape/server
