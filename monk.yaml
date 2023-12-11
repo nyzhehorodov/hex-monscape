@@ -1,0 +1,248 @@
+namespace: hex-monscape
+
+mysql:
+  defines: runnable
+  inherits: monk-mysql/db
+  metadata:
+    name: mysql
+    description: MySQL database service.
+    icon: https://labs.mysql.com/common/logos/mysql-logo.svg?v2
+  variables:
+    image_tag:
+      type: string
+      value: latest
+      description: ''
+    monk_mysql_database:
+      type: string
+      value: monk
+      description: ''
+    monk_mysql_password:
+      type: string
+      value: monk
+      description: ''
+    monk_mysql_root_password:
+      type: string
+      value: monk
+      description: ''
+    monk_mysql_user:
+      type: string
+      value: monk
+      description: ''
+
+server:
+  defines: runnable
+  metadata:
+    name: server
+    description: Go-based backend server application.
+    icon: https://emojiapi.dev/api/v1/robot.svg
+  containers:
+    server:
+      image: env-3579.registry.local/server:master-51cea85
+      build: .
+      dockerfile: build/package/server/Dockerfile
+  services:
+    http-server:
+      description: HTTP server port
+      container: server
+      port: $port
+      host-port: $port
+      publish: true
+      protocol: tcp
+  connections:
+    memory-storage:
+      target: hex-monscape/client
+      service: client-http
+      optional: true
+      description: Connection to the client service for in-memory storage configuration
+    mysql-storage:
+      target: hex-monscape/mysql
+      service: monk-mysql-db
+      optional: true
+      description: Connection to the MySQL service for MySQL storage configuration
+    dynamodb-storage:
+      target: hex-monscape/localstack
+      service: localstack-main-port
+      optional: true
+      description: Connection to the LocalStack service for DynamoDB storage configuration
+  variables:
+    port:
+      env: PORT
+      type: string
+      value: 9186
+      description: Port on which the server service listens
+    storage-type:
+      env: STORAGE_TYPE
+      type: string
+      value: memory
+      description: Type of storage to use, defaults to memory
+    storage-memory-monster-data-path:
+      env: STORAGE_MEMORY_MONSTER_DATA_PATH
+      type: string
+      value: /data/monsters
+      description: File path for monster data when using in-memory storage
+    storage-dynamodb-localstack-endpoint:
+      env: STORAGE_DYNAMODB_LOCALSTACK_ENDPOINT
+      type: string
+      value: http://localstack:4566
+      description: LocalStack endpoint for DynamoDB
+    storage-dynamodb-battle-table-name:
+      env: STORAGE_DYNAMODB_BATTLE_TABLE_NAME
+      type: string
+      value: battle_data
+      description: DynamoDB table name for battle data
+    storage-dynamodb-game-table-name:
+      env: STORAGE_DYNAMODB_GAME_TABLE_NAME
+      type: string
+      value: game_data
+      description: DynamoDB table name for game data
+    storage-dynamodb-monster-table-name:
+      env: STORAGE_DYNAMODB_MONSTER_TABLE_NAME
+      type: string
+      value: monster_data
+      description: DynamoDB table name for monster data
+    storage-mysql-sql-dsn:
+      env: STORAGE_MYSQL_SQL_DSN
+      type: string
+      value: monk:monk@tcp(mysql:3306)/monk
+      description: MySQL Data Source Name for SQL storage
+    aws-access-key-id:
+      env: AWS_ACCESS_KEY_ID
+      type: string
+      value: dummy-access-key
+      description: AWS access key ID for accessing AWS services
+    aws-region:
+      env: AWS_REGION
+      type: string
+      value: us-east-1
+      description: AWS region for the services
+    aws-secret-access-key:
+      env: AWS_SECRET_ACCESS_KEY
+      type: string
+      value: dummy-secret-key
+      description: AWS secret access key for accessing AWS services
+
+client:
+  defines: runnable
+  metadata:
+    name: client
+    description: Node.js frontend client application.
+    icon: https://emojiapi.dev/api/v1/robot.svg
+  containers:
+    client:
+      image: env-3579.registry.local/client:master-51cea85
+      build: .
+      dockerfile: build/package/client/Dockerfile
+  services:
+    client-http:
+      description: HTTP port for the client frontend service
+      container: client
+      port: 8161
+      host-port: 8161
+      publish: true
+      protocol: tcp
+  connections:
+    client-to-server:
+      target: hex-monscape/server
+      service: http-server
+      optional: true
+      description: Connection from the client frontend to the server backend
+  variables:
+    vite-monscape-url:
+      env: VITE_MONSCAPE_URL
+      type: string
+      value: <- connection-hostname("client-to-server")
+      description: URL of the Monscape service the client connects to
+
+localstack:
+  defines: runnable
+  metadata:
+    name: localstack
+    description: LocalStack service for AWS emulation.
+    icon: https://emojiapi.dev/api/v1/robot.svg
+  containers:
+    localstack:
+      image: localstack/localstack:2.1.0
+      build: .
+  services:
+    localstack-main-port:
+      description: Main entry point for all LocalStack services
+      container: localstack
+      port: 4566
+      host-port: 4566
+      publish: true
+      protocol: tcp
+  connections:
+    server-localstack-connection:
+      target: hex-monscape/server
+      service: http-server
+      optional: true
+      description: Connection from LocalStack to the server service for DynamoDB emulation
+    lambda-localstack-connection:
+      target: hex-monscape/lambda
+      service: lambda-service-port
+      optional: true
+      description: >-
+        Connection from LocalStack to the lambda service for AWS Lambda
+        emulation
+  variables:
+    aws-default-region:
+      env: AWS_DEFAULT_REGION
+      type: string
+      value: eu-west-1
+      description: Default AWS region for LocalStack services
+
+lambda:
+  defines: runnable
+  metadata:
+    name: lambda
+    description: AWS Lambda emulation service.
+    icon: https://emojiapi.dev/api/v1/robot.svg
+  containers:
+    lambda:
+      image: env-3579.registry.local/lambda:master-51cea85
+      build: .
+      dockerfile: build/package/lambda/Dockerfile.local
+  services:
+    lambda-service-port:
+      description: Port exposed by the lambda service for incoming requests
+      container: lambda
+      port: 9186
+      host-port: 9186
+      publish: true
+      protocol: tcp
+  connections:
+    localstack-connection:
+      target: hex-monscape/localstack
+      service: localstack-main-port
+      optional: true
+      description: Connection to LocalStack service for AWS emulation
+  variables:
+    localstack-endpoint:
+      env: LOCALSTACK_ENDPOINT
+      type: string
+      value: <- connection-hostname("localstack-connection")
+      description: Endpoint for LocalStack, used for local AWS emulation
+    dynamodb-battle-table:
+      env: DYNAMODB_BATTLE_TABLE
+      type: string
+      value: battle_data
+      description: DynamoDB table name for battle data
+    dynamodb-game-table:
+      env: DYNAMODB_GAME_TABLE
+      type: string
+      value: game_data
+      description: DynamoDB table name for game data
+    dynamodb-monster-table:
+      env: DYNAMODB_MONSTER_TABLE
+      type: string
+      value: monster_data
+      description: DynamoDB table name for monster data
+
+stack:
+  defines: group
+  members:
+    - hex-monscape/mysql
+    - hex-monscape/server
+    - hex-monscape/client
+    - hex-monscape/localstack
+    - hex-monscape/lambda
