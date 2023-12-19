@@ -1,0 +1,146 @@
+namespace: hex-monscape
+
+mysql:
+  defines: runnable
+  inherits: monk-mysql/db
+  metadata:
+    name: mysql
+    description: MySQL database service.
+    icon: https://labs.mysql.com/common/logos/mysql-logo.svg?v2
+  variables:
+    image_tag:
+      type: string
+      value: latest
+      description: ''
+    monk_mysql_database:
+      type: string
+      value: monk
+      description: ''
+    monk_mysql_password:
+      type: string
+      value: monk
+      description: ''
+    monk_mysql_root_password:
+      type: string
+      value: monk
+      description: ''
+    monk_mysql_user:
+      type: string
+      value: monk
+      description: ''
+
+lambda:
+  defines: runnable
+  metadata:
+    name: lambda
+    description: AWS Lambda service with both client and server components.
+    icon: https://emojiapi.dev/api/v1/robot.svg
+  containers:
+    lambda:
+      image: public.ecr.aws/lambda/go:latest
+      build: .
+  services:
+    lambda-http:
+      description: HTTP port for the lambda service
+      container: lambda
+      port: 9186
+      host-port: 9186
+      publish: true
+      protocol: tcp
+  connections:
+    mysql-database-connection:
+      target: hex-monscape/mysql
+      service: monk-mysql-db
+      optional: true
+      description: Connection from lambda service to MySQL database
+    dynamodb-database-connection:
+      target: hex-monscape/dynamodb
+      service: dynamodb-api
+      optional: true
+      description: Connection from lambda service to DynamoDB database
+  variables:
+    localstack-endpoint:
+      env: LOCALSTACK_ENDPOINT
+      type: string
+      value: <- connection-hostname("dynamodb-database-connection")
+      description: Endpoint for localstack services
+    dynamodb-battle-table:
+      env: DYNAMODB_BATTLE_TABLE
+      type: string
+      value: battle
+      description: DynamoDB table name for battle records
+    dynamodb-game-table:
+      env: DYNAMODB_GAME_TABLE
+      type: string
+      value: game
+      description: DynamoDB table name for game records
+    dynamodb-monster-table:
+      env: DYNAMODB_MONSTER_TABLE
+      type: string
+      value: monster
+      description: DynamoDB table name for monster records
+    aws-access-key-id:
+      env: AWS_ACCESS_KEY_ID
+      type: string
+      value: awslocal
+      description: AWS access key ID for localstack
+    aws-region:
+      env: AWS_REGION
+      type: string
+      value: eu-west-1
+      description: AWS region for the service
+    aws-secret-access-key:
+      env: AWS_SECRET_ACCESS_KEY
+      type: string
+      value: awslocal
+      description: AWS secret access key for localstack
+
+dynamodb:
+  defines: runnable
+  metadata:
+    name: dynamodb
+    description: DynamoDB database service provided by LocalStack.
+    icon: https://emojiapi.dev/api/v1/robot.svg
+  containers:
+    dynamodb:
+      image: localstack/localstack:latest
+      build: .
+  services:
+    dynamodb-api:
+      description: Port for DynamoDB API requests within LocalStack
+      container: dynamodb
+      port: 4566
+      host-port: 4566
+      publish: true
+      protocol: tcp
+  connections:
+    dynamodb-localstack:
+      target: hex-monscape/localstack
+      service: '!!!SETME!!!'
+      optional: true
+      description: >-
+        Connection from the DynamoDB service to the LocalStack service which
+        emulates AWS services locally.
+  variables:
+    aws-access-key-id:
+      env: AWS_ACCESS_KEY_ID
+      type: string
+      value: awslocal
+      description: AWS access key ID for localstack DynamoDB
+    aws-secret-access-key:
+      env: AWS_SECRET_ACCESS_KEY
+      type: string
+      value: awslocal
+      description: AWS secret access key for localstack DynamoDB
+    aws-default-region:
+      env: AWS_DEFAULT_REGION
+      type: string
+      value: eu-west-1
+      description: Default AWS region for localstack DynamoDB
+
+stack:
+  defines: group
+  members:
+    - hex-monscape/mysql
+    - hex-monscape/lambda
+    - hex-monscape/dynamodb
